@@ -80,8 +80,6 @@ python movie-bot.py
 
 - `movie-bot.py` - Main application script
 - `load_env.py` - Environment variable loader
-- `runtime.py` - Runtime fetching utilities
-- `test_env.py` - Environment testing script
 
 ## Contributing
 

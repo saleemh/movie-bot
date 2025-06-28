@@ -1,20 +1,23 @@
 # Movie Bot
 
-A Python application that integrates with The Movie Database (TMDB) API and Notion to manage movie information, including fetching movie posters and runtime data.
+A Python application that integrates with The Movie Database (TMDB) API and Notion to automatically enrich movie databases with comprehensive information including posters, runtime, and synopses.
 
 ## Features
 
-- 🔍 Search movies on TMDB API
-- 🖼️ Fetch and update movie posters in Notion
-- ⏱️ Retrieve and update movie runtime information
-- 🔒 Secure environment variable management
-- 📊 Notion database integration
+- 🔍 **Smart Movie Search**: Search movies on TMDB API with title and year matching
+- 🖼️ **Poster Management**: Fetch and update high-quality movie posters in Notion
+- ⏱️ **Runtime Data**: Retrieve and update movie runtime information
+- 📚 **Synopsis Support**: Fetch and store movie descriptions/synopses
+- 🔒 **Smart Updates**: Skip processing for already populated data
+- 📊 **Verbose Logging**: Detailed progress tracking and status messages
+- 🔒 **Secure Environment**: Environment variable management for API keys
+- 📚 **Batch Processing**: Process entire Notion databases efficiently
 
 ## Prerequisites
 
 - Python 3.7+
-- TMDB API key
-- Notion API key and database ID
+- TMDB API key ([Get one here](https://www.themoviedb.org/settings/api))
+- Notion API key and database ID ([Setup guide](https://developers.notion.com/docs/create-a-notion-integration))
 
 ## Installation
 
@@ -54,12 +57,24 @@ ENVIRONMENT=production
 PORT=8000
 ```
 
+## Notion Database Setup
+
+Your Notion database should have the following properties:
+
+- **Name** (Title) - Movie title
+- **Year** (Number) - Release year
+- **Poster** (Files & Media) - Movie poster images
+- **Runtime** (Number) - Movie length in minutes
+- **Synopsis** (Text) - Movie description
+
 ## Usage
 
 Run the main script:
 ```bash
 python movie-bot.py
 ```
+
+### Sample Output
 
 ## Project Structure
 

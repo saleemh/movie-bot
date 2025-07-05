@@ -1,7 +1,13 @@
 #!/usr/bin/env python3
 """
-Script to update Saleem Ranking column in Notion database to use integer values only
-while maintaining the same sort order.
+Script to update movie or TV show rankings in Notion database
+Pulls "Name" and "Saleem Ranking" columns, sorts by ranking, and writes back integer rankings
+
+Usage:
+    python update-movie-ranking.py                    # Update movies database (default)
+    python update-movie-ranking.py --tv               # Update TV shows database
+    python update-movie-ranking.py --execute          # Actually update (default is dry-run)
+    python update-movie-ranking.py --tv --execute     # Update TV shows database with execution
 """
 
 import os
@@ -12,213 +18,243 @@ from dotenv import load_dotenv
 # Load environment variables
 load_dotenv()
 
+# Get environment variables
 NOTION_KEY = os.getenv("NOTION_KEY")
 NOTION_DB = os.getenv("NOTION_DB")
+NOTION_SHOW_DB = os.getenv("NOTION_SHOW_DB")
 
-# Initialize Notion client
-notion = NotionClient(auth=NOTION_KEY)
+def validate_environment(use_tv_db=False):
+    """Validate that required environment variables are set"""
+    if not NOTION_KEY:
+        print("❌ Error: NOTION_KEY environment variable not set")
+        return False
+    
+    if use_tv_db:
+        if not NOTION_SHOW_DB:
+            print("❌ Error: NOTION_SHOW_DB environment variable not set")
+            return False
+    else:
+        if not NOTION_DB:
+            print("❌ Error: NOTION_DB environment variable not set")
+            return False
+    
+    return True
 
-def fetch_all_rankings():
-    """Fetch all movies with their current Saleem Ranking values"""
-    print("📚 Fetching all movies from Notion database...")
+def fetch_movie_data(notion_client, database_id, content_type="movies"):
+    """Fetch movie/show names and rankings from Notion database"""
+    print(f"📚 Fetching {content_type} from Notion database...")
     
     try:
-        response = notion.databases.query(database_id=NOTION_DB)
-        rows = response.get("results", [])
-        print(f"📋 Found {len(rows)} movies in database")
+        # Query the database with explicit parameters to get all results
+        movies = []
+        has_more = True
+        next_cursor = None
+        page_count = 0
         
-        movies_with_rankings = []
-        movies_without_rankings = []
-        
-        for row in rows:
-            # Get movie title
-            title_property = row["properties"].get("Name", {})
-            title_list = title_property.get("title", [])
-            title = title_list[0]["plain_text"] if title_list else "Unknown Title"
+        while has_more:
+            page_count += 1
+            print(f"📄 Fetching page {page_count}...")
             
-            # Get current ranking
-            ranking_property = row["properties"].get("Saleem Ranking", {})
-            current_ranking = ranking_property.get("number")
+            query_params = {
+                "database_id": database_id,
+                "page_size": 100  # Maximum allowed by Notion API
+            }
             
-            page_id = row["id"]
+            if next_cursor:
+                query_params["start_cursor"] = next_cursor
             
-            if current_ranking is not None:
-                movies_with_rankings.append({
-                    "title": title,
-                    "page_id": page_id,
-                    "current_ranking": current_ranking
+            response = notion_client.databases.query(**query_params)
+            
+            print(f"📋 Page {page_count}: Found {len(response.get('results', []))} rows")
+            
+            for row in response.get("results", []):
+                # Debug: Print available properties for first few rows
+                if len(movies) < 3:
+                    print(f"🔍 Debug - Available properties for row {len(movies) + 1}: {list(row['properties'].keys())}")
+                
+                # Extract movie name
+                name_property = row["properties"].get("Name", {})
+                if name_property.get("title") and len(name_property["title"]) > 0:
+                    name = name_property["title"][0]["plain_text"]
+                else:
+                    print(f"⚠️  Skipping row with no name: {row['id']}")
+                    if len(movies) < 5:  # Debug first few rows
+                        print(f"🔍 Debug - Name property structure: {name_property}")
+                    continue
+                
+                # Extract ranking
+                ranking_property = row["properties"].get("Saleem Ranking", {})
+                ranking = ranking_property.get("number")
+                
+                # Debug: Show ranking info for first few rows
+                if len(movies) < 3:
+                    print(f"🔍 Debug - '{name}' ranking: {ranking} (property: {ranking_property})")
+                
+                movies.append({
+                    "page_id": row["id"],
+                    "name": name,
+                    "current_ranking": ranking
                 })
-                print(f"📊 {title}: Current ranking = {current_ranking}")
-            else:
-                movies_without_rankings.append({
-                    "title": title,
-                    "page_id": page_id,
-                    "current_ranking": None
-                })
-                print(f"⚠️  {title}: No ranking set")
+            
+            # Check if there are more pages
+            has_more = response.get("has_more", False)
+            next_cursor = response.get("next_cursor")
         
-        print(f"\n📈 Movies with rankings: {len(movies_with_rankings)}")
-        print(f"📉 Movies without rankings: {len(movies_without_rankings)}")
+        print(f"📋 Total found: {len(movies)} {content_type} across {page_count} pages")
         
-        return movies_with_rankings, movies_without_rankings
+        # Additional debug: Show some stats
+        movies_with_ranking = [m for m in movies if m["current_ranking"] is not None]
+        movies_without_ranking = [m for m in movies if m["current_ranking"] is None]
+        print(f"📊 {content_type.title()} with rankings: {len(movies_with_ranking)}")
+        print(f"📊 {content_type.title()} without rankings: {len(movies_without_ranking)}")
         
+        return movies
+    
     except Exception as e:
         print(f"❌ Error fetching data from Notion: {e}")
-        return [], []
-
-def calculate_new_rankings(movies_with_rankings):
-    """Calculate new integer rankings while preserving sort order"""
-    print("\n🔄 Calculating new integer rankings...")
-    
-    if not movies_with_rankings:
-        print("⚠️  No movies with rankings to process")
+        print(f"🔍 Debug - Exception type: {type(e)}")
         return []
-    
-    # Sort movies by current ranking (ascending)
-    sorted_movies = sorted(movies_with_rankings, key=lambda x: x["current_ranking"])
-    
-    print("📊 Current ranking order:")
-    for i, movie in enumerate(sorted_movies):
-        print(f"  {i+1}. {movie['title']}: {movie['current_ranking']}")
-    
-    # Assign new integer rankings (1, 2, 3, ...)
-    ranking_updates = []
-    for i, movie in enumerate(sorted_movies):
-        new_ranking = i + 1
-        ranking_updates.append({
-            "title": movie["title"],
-            "page_id": movie["page_id"],
-            "old_ranking": movie["current_ranking"],
-            "new_ranking": new_ranking
-        })
-    
-    print(f"\n🎯 New integer rankings calculated:")
-    for update in ranking_updates:
-        if update["old_ranking"] != update["new_ranking"]:
-            print(f"  📝 {update['title']}: {update['old_ranking']} → {update['new_ranking']}")
-        else:
-            print(f"  ✅ {update['title']}: {update['old_ranking']} (no change)")
-    
-    return ranking_updates
 
-def update_rankings(ranking_updates, dry_run=True):
-    """Update the rankings in Notion database"""
-    if not ranking_updates:
-        print("⚠️  No ranking updates to process")
-        return
+def sort_and_assign_rankings(movies):
+    """Sort movies by ranking and assign new integer rankings"""
+    print("\n🔄 Processing rankings...")
     
-    changes_needed = [u for u in ranking_updates if u["old_ranking"] != u["new_ranking"]]
-    no_changes = [u for u in ranking_updates if u["old_ranking"] == u["new_ranking"]]
+    # Separate movies with and without rankings
+    movies_with_ranking = [m for m in movies if m["current_ranking"] is not None]
+    movies_without_ranking = [m for m in movies if m["current_ranking"] is None]
     
-    print(f"\n📊 Summary:")
-    print(f"  🔄 Movies requiring updates: {len(changes_needed)}")
-    print(f"  ✅ Movies with no changes: {len(no_changes)}")
+    # Sort movies with rankings by their current ranking (ascending)
+    movies_with_ranking.sort(key=lambda x: x["current_ranking"])
+    
+    # Assign new integer rankings only to movies that already have rankings
+    for i, movie in enumerate(movies_with_ranking, 1):
+        movie["new_ranking"] = i
+    
+    # Movies without rankings remain without rankings (None/blank)
+    for movie in movies_without_ranking:
+        movie["new_ranking"] = None
+    
+    # Combine all movies (ranked first, then unranked)
+    all_movies = movies_with_ranking + movies_without_ranking
+    
+    return all_movies
+
+def display_ranking_changes(movies):
+    """Display the ranking changes that would be made"""
+    print("\n📊 Ranking Changes:")
+    print("=" * 80)
+    print(f"{'Rank':<6} {'Name':<40} {'Current':<12} {'New':<12} {'Change'}")
+    print("-" * 80)
+    
+    for movie in movies:
+        current = movie["current_ranking"]
+        new = movie["new_ranking"]
+        
+        # Format current and new rankings
+        current_str = f"{current}" if current is not None else "None"
+        new_str = f"{new}" if new is not None else "None"
+        
+        # Determine change
+        if current is None and new is None:
+            change = "No ranking"
+        elif current is None:
+            change = "New ranking"
+        elif new is None:
+            change = "Ranking removed"
+        elif current == new:
+            change = "No change"
+        else:
+            change = f"{current} → {new}"
+        
+        print(f"{new_str:<6} {movie['name']:<40} {current_str:<12} {new_str:<12} {change}")
+
+def update_notion_rankings(notion_client, movies, dry_run=True, content_type="movies"):
+    """Update the rankings in Notion (or show what would be updated if dry_run=True)"""
+    
+    # Filter movies that need updates (only those with rankings)
+    movies_to_update = [m for m in movies if m["new_ranking"] is not None]
+    movies_without_ranking = [m for m in movies if m["new_ranking"] is None]
     
     if dry_run:
-        print(f"\n🔍 DRY RUN MODE - No actual changes will be made")
-        print("=" * 60)
-        
-        if changes_needed:
-            print("📝 Changes that WOULD be made:")
-            for update in changes_needed:
-                print(f"  🎬 {update['title']}")
-                print(f"     Old ranking: {update['old_ranking']}")
-                print(f"     New ranking: {update['new_ranking']}")
-                print(f"     Page ID: {update['page_id'][:8]}...")
-                print()
-        else:
-            print("✅ No changes needed - all rankings are already integers!")
-        
-        print("=" * 60)
-        print("🚀 To apply these changes, run the script with --apply flag")
-        
-    else:
-        print(f"\n🚀 APPLYING CHANGES...")
-        print("=" * 60)
-        
-        if not changes_needed:
-            print("✅ No changes needed - all rankings are already integers!")
-            return
-        
-        success_count = 0
-        error_count = 0
-        
-        for i, update in enumerate(changes_needed, 1):
-            try:
-                print(f"🔄 [{i}/{len(changes_needed)}] Updating {update['title']}...")
-                print(f"   📊 {update['old_ranking']} → {update['new_ranking']}")
-                
-                notion.pages.update(
-                    page_id=update["page_id"],
-                    properties={
-                        "Saleem Ranking": {
-                            "number": update["new_ranking"]
-                        }
+        print("\n🔍 DRY RUN MODE - No changes will be made to Notion")
+        print(f"📊 {len(movies_to_update)} {content_type} would be updated")
+        print(f"📊 {len(movies_without_ranking)} {content_type} would remain without rankings")
+        print("Run with --execute flag to apply changes")
+        return
+    
+    print("\n🔄 Updating rankings in Notion...")
+    print(f"📊 Updating {len(movies_to_update)} {content_type} with rankings")
+    print(f"📊 Leaving {len(movies_without_ranking)} {content_type} without rankings")
+    
+    success_count = 0
+    error_count = 0
+    
+    for movie in movies_to_update:
+        try:
+            # Update the page with new ranking
+            notion_client.pages.update(
+                page_id=movie["page_id"],
+                properties={
+                    "Saleem Ranking": {
+                        "number": movie["new_ranking"]
                     }
-                )
-                
-                print(f"   ✅ Successfully updated {update['title']}")
-                success_count += 1
-                
-            except Exception as e:
-                print(f"   ❌ Error updating {update['title']}: {e}")
-                error_count += 1
-        
-        print("=" * 60)
-        print(f"📊 Update Results:")
-        print(f"  ✅ Successful updates: {success_count}")
-        print(f"  ❌ Failed updates: {error_count}")
-        print(f"  📝 Total movies processed: {len(changes_needed)}")
-        
-        if error_count == 0:
-            print("🎉 All ranking updates completed successfully!")
-        else:
-            print(f"⚠️  {error_count} updates failed - please check the errors above")
+                }
+            )
+            print(f"✅ Updated {movie['name']}: {movie['new_ranking']}")
+            success_count += 1
+            
+        except Exception as e:
+            print(f"❌ Error updating {movie['name']}: {e}")
+            error_count += 1
+    
+    print(f"\n📊 Update Summary:")
+    print(f"✅ Successfully updated: {success_count}")
+    if error_count > 0:
+        print(f"❌ Errors: {error_count}")
+    print(f"📊 {content_type.title()} left without rankings: {len(movies_without_ranking)}")
 
 def main():
-    parser = argparse.ArgumentParser(description="Update Saleem Ranking column to use integer values only")
-    parser.add_argument("--apply", action="store_true", 
-                       help="Apply the changes (default is dry-run mode)")
+    """Main function"""
+    parser = argparse.ArgumentParser(description="Update movie/TV show rankings in Notion database")
+    parser.add_argument("--execute", action="store_true", 
+                       help="Actually update the database (default is dry-run)")
+    parser.add_argument("--tv", "--shows", action="store_true", 
+                       help="Use TV shows database instead of movies database")
     args = parser.parse_args()
     
-    dry_run = not args.apply
+    # Determine database and content type
+    use_tv_db = args.tv
+    content_type = "TV shows" if use_tv_db else "movies"
+    database_id = NOTION_SHOW_DB if use_tv_db else NOTION_DB
     
-    print("🎬 Saleem Ranking Integer Converter")
+    print(f"🎬 {content_type.title()} Ranking Update Script")
     print("=" * 50)
+    print(f"📊 Target: {content_type}")
     
-    if dry_run:
-        print("🔍 Running in DRY RUN mode")
-    else:
-        print("🚀 Running in APPLY mode - changes will be made!")
+    # Validate environment
+    if not validate_environment(use_tv_db):
+        return 1
     
-    print()
+    # Initialize Notion client
+    notion = NotionClient(auth=NOTION_KEY)
     
-    # Validate environment variables
-    if not NOTION_KEY:
-        print("❌ NOTION_KEY environment variable not set")
-        return
+    # Fetch data
+    movies = fetch_movie_data(notion, database_id, content_type)
+    if not movies:
+        print(f"❌ No {content_type} found or error fetching data")
+        return 1
     
-    if not NOTION_DB:
-        print("❌ NOTION_DB environment variable not set")
-        return
+    # Sort and assign rankings
+    movies = sort_and_assign_rankings(movies)
     
-    print("✅ Environment variables loaded successfully")
-    print()
+    # Display changes
+    display_ranking_changes(movies)
     
-    # Step 1: Fetch all rankings
-    movies_with_rankings, movies_without_rankings = fetch_all_rankings()
+    # Update Notion (or show what would be updated)
+    update_notion_rankings(notion, movies, dry_run=not args.execute, content_type=content_type)
     
-    if not movies_with_rankings:
-        print("⚠️  No movies with rankings found. Nothing to update.")
-        return
-    
-    # Step 2: Calculate new rankings
-    ranking_updates = calculate_new_rankings(movies_with_rankings)
-    
-    # Step 3: Update rankings (dry run or apply)
-    update_rankings(ranking_updates, dry_run=dry_run)
-    
-    print(f"\n✅ Script completed!")
+    print("\n✅ Script completed successfully!")
+    return 0
 
 if __name__ == "__main__":
-    main() 
+    exit(main()) 

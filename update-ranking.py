@@ -4,10 +4,10 @@ Script to update movie or TV show rankings in Notion database
 Pulls "Name" and "Saleem Ranking" columns, sorts by ranking, and writes back integer rankings
 
 Usage:
-    python update-movie-ranking.py                    # Update movies database (default)
-    python update-movie-ranking.py --tv               # Update TV shows database
-    python update-movie-ranking.py --execute          # Actually update (default is dry-run)
-    python update-movie-ranking.py --tv --execute     # Update TV shows database with execution
+    python update-ranking.py                    # Update movies database (default)
+    python update-ranking.py --tv               # Update TV shows database
+    python update-ranking.py --execute          # Actually update (default is dry-run)
+    python update-ranking.py --tv --execute     # Update TV shows database with execution
 """
 
 import os
@@ -142,48 +142,83 @@ def sort_and_assign_rankings(movies):
 def display_ranking_changes(movies):
     """Display the ranking changes that would be made"""
     print("\n📊 Ranking Changes:")
-    print("=" * 80)
-    print(f"{'Rank':<6} {'Name':<40} {'Current':<12} {'New':<12} {'Change'}")
-    print("-" * 80)
+    print("=" * 85)
+    print(f"{'Rank':<6} {'Name':<40} {'Current':<12} {'New':<12} {'Change':<15}")
+    print("-" * 85)
+    
+    # Separate movies into categories for better display
+    movies_with_changes = []
+    movies_no_change = []
+    movies_no_ranking = []
     
     for movie in movies:
         current = movie["current_ranking"]
         new = movie["new_ranking"]
         
-        # Format current and new rankings
+        if current is None and new is None:
+            movies_no_ranking.append(movie)
+        elif current != new:
+            movies_with_changes.append(movie)
+        else:
+            movies_no_change.append(movie)
+    
+    # Display movies with changes first
+    for movie in movies_with_changes:
+        current = movie["current_ranking"]
+        new = movie["new_ranking"]
+        
         current_str = f"{current}" if current is not None else "None"
         new_str = f"{new}" if new is not None else "None"
         
-        # Determine change
-        if current is None and new is None:
-            change = "No ranking"
-        elif current is None:
-            change = "New ranking"
+        if current is None:
+            change = "🆕 New ranking"
         elif new is None:
-            change = "Ranking removed"
-        elif current == new:
-            change = "No change"
+            change = "❌ Ranking removed"
         else:
-            change = f"{current} → {new}"
+            change = f"🔄 {current} → {new}"
         
-        print(f"{new_str:<6} {movie['name']:<40} {current_str:<12} {new_str:<12} {change}")
+        print(f"{new_str:<6} {movie['name']:<40} {current_str:<12} {new_str:<12} {change:<15}")
+    
+    # Display movies with no change
+    for movie in movies_no_change:
+        current = movie["current_ranking"]
+        new = movie["new_ranking"]
+        
+        current_str = f"{current}" if current is not None else "None"
+        new_str = f"{new}" if new is not None else "None"
+        
+        print(f"{new_str:<6} {movie['name']:<40} {current_str:<12} {new_str:<12} {'⚡ No change':<15}")
+    
+    # Display movies without rankings
+    for movie in movies_no_ranking:
+        current_str = "None"
+        new_str = "None"
+        
+        print(f"{new_str:<6} {movie['name']:<40} {current_str:<12} {new_str:<12} {'📝 No ranking':<15}")
+    
+    # Summary
+    print("-" * 85)
+    print(f"📊 Summary: {len(movies_with_changes)} changes, {len(movies_no_change)} no change, {len(movies_no_ranking)} unranked")
 
 def update_notion_rankings(notion_client, movies, dry_run=True, content_type="movies"):
     """Update the rankings in Notion (or show what would be updated if dry_run=True)"""
     
-    # Filter movies that need updates (only those with rankings)
-    movies_to_update = [m for m in movies if m["new_ranking"] is not None]
+    # Filter movies that actually need updates (only those where ranking changed)
+    movies_to_update = [m for m in movies if m["new_ranking"] is not None and m["current_ranking"] != m["new_ranking"]]
     movies_without_ranking = [m for m in movies if m["new_ranking"] is None]
+    movies_no_change = [m for m in movies if m["new_ranking"] is not None and m["current_ranking"] == m["new_ranking"]]
     
     if dry_run:
         print("\n🔍 DRY RUN MODE - No changes will be made to Notion")
         print(f"📊 {len(movies_to_update)} {content_type} would be updated")
+        print(f"📊 {len(movies_no_change)} {content_type} already have correct rankings (no update needed)")
         print(f"📊 {len(movies_without_ranking)} {content_type} would remain without rankings")
         print("Run with --execute flag to apply changes")
         return
     
     print("\n🔄 Updating rankings in Notion...")
-    print(f"📊 Updating {len(movies_to_update)} {content_type} with rankings")
+    print(f"📊 Updating {len(movies_to_update)} {content_type} with ranking changes")
+    print(f"📊 Skipping {len(movies_no_change)} {content_type} with correct rankings (no update needed)")
     print(f"📊 Leaving {len(movies_without_ranking)} {content_type} without rankings")
     
     success_count = 0
@@ -211,6 +246,7 @@ def update_notion_rankings(notion_client, movies, dry_run=True, content_type="mo
     print(f"✅ Successfully updated: {success_count}")
     if error_count > 0:
         print(f"❌ Errors: {error_count}")
+    print(f"⚡ Skipped (no change needed): {len(movies_no_change)}")
     print(f"📊 {content_type.title()} left without rankings: {len(movies_without_ranking)}")
 
 def main():

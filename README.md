@@ -1,93 +1,136 @@
-# Movie Bot
+# Movie Bot, Photo Enricher, and Property Text Enricher
 
-A Python application that integrates with The Movie Database (TMDB) API and Notion to automatically enrich movie databases with comprehensive information including posters, runtime, and synopses.
+This repository contains scripts for enriching Notion databases with movie data, images, and AI-generated text.
 
-## Features
+## Scripts
 
-- 🔍 **Smart Movie Search**: Search movies on TMDB API with title and year matching
-- 🖼️ **Poster Management**: Fetch and update high-quality movie posters in Notion
-- ⏱️ **Runtime Data**: Retrieve and update movie runtime information
-- 📚 **Synopsis Support**: Fetch and store movie descriptions/synopses
-- 🔒 **Smart Updates**: Skip processing for already populated data
-- 📊 **Verbose Logging**: Detailed progress tracking and status messages
-- 🔒 **Secure Environment**: Environment variable management for API keys
-- 📚 **Batch Processing**: Process entire Notion databases efficiently
+### movie-bot.py
+Enriches a Notion movie database with posters, runtime, synopsis, and year information from TMDB.
 
-## Prerequisites
+### photo-enricher.py
+Enriches any Notion database with images based on text properties using the Unsplash API.
 
-- Python 3.7+
-- TMDB API key ([Get one here](https://www.themoviedb.org/settings/api))
-- Notion API key and database ID ([Setup guide](https://developers.notion.com/docs/create-a-notion-integration))
+### property-text-enricher.py
+Enriches any Notion database with AI-generated text based on custom prompts using OpenAI's API.
 
-## Installation
+## Setup
 
-1. Clone the repository:
-```bash
-git clone <your-github-repo-url>
-cd movie-bot
-```
-
-2. Create a virtual environment:
-```bash
-python -m venv venv
-source venv/bin/activate  # On Windows: venv\Scripts\activate
-```
-
-3. Install dependencies:
+1. Install dependencies:
 ```bash
 pip install -r requirements.txt
 ```
 
-4. Set up environment variables:
-   - Copy `.env.example` to `.env`
-   - Fill in your API keys and configuration
-
-## Environment Variables
-
-Create a `.env` file with the following variables:
-
-```env
-TMDB_KEY=your_tmdb_api_key_here
-NOTION_KEY=your_notion_api_key_here
-NOTION_DB=your_notion_database_id_here
-
-# Optional Configuration
-DEBUG=False
-ENVIRONMENT=production
-PORT=8000
+2. Create a `.env` file with your API keys:
+```
+NOTION_KEY=your_notion_integration_token
+TMDB_KEY=your_tmdb_api_key
+UNSPLASH_ACCESS_KEY=your_unsplash_access_key
+OPENAI_API_KEY=your_openai_api_key
+OPENAI_MODEL=gpt-3.5-turbo
+OPENAI_ENDPOINT=https://api.openai.com/v1/chat/completions
 ```
 
-## Notion Database Setup
+### Getting API Keys
 
-Your Notion database should have the following properties:
-
-- **Name** (Title) - Movie title
-- **Year** (Number) - Release year
-- **Poster** (Files & Media) - Movie poster images
-- **Runtime** (Number) - Movie length in minutes
-- **Synopsis** (Text) - Movie description
+- **Notion**: Create an integration at https://www.notion.so/my-integrations
+- **TMDB**: Sign up at https://www.themoviedb.org/settings/api
+- **Unsplash**: Create an app at https://unsplash.com/developers
+- **OpenAI**: Get your API key at https://platform.openai.com/api-keys
 
 ## Usage
 
-Run the main script:
+### Movie Bot
 ```bash
 python movie-bot.py
 ```
 
-### Sample Output
+### Photo Enricher
+```bash
+python photo-enricher.py "Database Name" "Input Property" "Output Property"
+```
 
-## Project Structure
+**Options:**
+- `--skip-existing`: Skip pages that already have images in the output property
 
-- `movie-bot.py` - Main application script
-- `load_env.py` - Environment variable loader
+**Example:**
+```bash
+python photo-enricher.py "Travel Destinations" "Location" "Photo"
+```
 
-## Contributing
+This will:
+1. Find the "Travel Destinations" database
+2. Read the "Location" property from each page
+3. Search for relevant images on Unsplash
+4. Add the images to the "Photo" property
 
-1. Fork the repository
-2. Create a feature branch
-3. Make your changes
-4. Submit a pull request
+### Property Text Enricher
+```bash
+python property-text-enricher.py "Database Name" "Input Property" "Output Property" "Your Prompt"
+```
 
-## License
+**Options:**
+- `--skip-existing`: Skip pages that already have text in the output property
+- `--max-tokens`: Maximum tokens for AI response (default: 500)
 
-MIT License 
+**Example:**
+```bash
+python property-text-enricher.py "Product Catalog" "Product Name" "Marketing Copy" "Write a compelling 2-sentence marketing description for this product that highlights its key benefits:"
+```
+
+This will:
+1. Find the "Product Catalog" database
+2. Read the "Product Name" property from each page
+3. Send the product name + prompt to OpenAI
+4. Add the generated marketing copy to the "Marketing Copy" property
+
+## Property Types for Text Enricher
+
+### Input Property (can be any of these):
+- **Title** - Page title
+- **Text** - Simple text property
+- **Formula** - Computed text values
+
+### Output Property (must be):
+- **Text** - Rich text property in Notion
+
+## Prompt Writing Guidelines
+
+For best results with the Property Text Enricher:
+
+### ✅ Good Prompts:
+- **Be specific**: "Write a 50-word product description that emphasizes benefits"
+- **Set format**: "Create a bullet-point list of 3 key features"
+- **Include constraints**: "Summarize in 2 sentences, professional tone"
+- **Specify style**: "Write in a casual, friendly tone for social media"
+
+### 📝 Example Prompts:
+```
+"Summarize this location in 1-2 sentences for a travel brochure:"
+"Create 3 hashtags for this product for Instagram marketing:"
+"Write a professional email subject line for this topic:"
+"Generate a brief company bio (50 words max) based on this description:"
+"Create a compelling call-to-action for this service:"
+```
+
+### ⚠️ Notion Text Property Limits:
+- Maximum 2,000 characters per text property
+- Use `--max-tokens` to control output length
+- Consider breaking long content into multiple properties
+
+## Environment Variables
+
+| Variable | Description | Required For | Default |
+|----------|-------------|--------------|---------|
+| `NOTION_KEY` | Notion integration token | All scripts | - |
+| `TMDB_KEY` | The Movie Database API key | movie-bot.py | - |
+| `UNSPLASH_ACCESS_KEY` | Unsplash API access key | photo-enricher.py | - |
+| `OPENAI_API_KEY` | OpenAI API key | property-text-enricher.py | - |
+| `OPENAI_MODEL` | OpenAI model to use | property-text-enricher.py | gpt-3.5-turbo |
+| `OPENAI_ENDPOINT` | OpenAI API endpoint | property-text-enricher.py | https://api.openai.com/v1/chat/completions |
+
+## Requirements
+
+- Python 3.7+
+- Active internet connection
+- Proper API permissions for your Notion workspace
+- Valid API keys for the services you want to use 

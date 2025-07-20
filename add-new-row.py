@@ -59,45 +59,55 @@ def call_openai_custom_prompt(prompt_id, prompt_version, input_text):
     }
     
     # Construct payload for Responses API
+    url = "https://api.openai.com/v1/responses"
     payload = {
-        "prompt_id": prompt_id,
-        "prompt_version": prompt_version,
-        "inputs": {
-            "input_text": input_text
-        }
+        "prompt": {"id": prompt_id, "version": prompt_version},
+        "input": f"Return JSON only: {input_text}",
+        "model": "gpt-4o",
+        "text": {"format": {"type": "json_object"}}
     }
     
     try:
         response = requests.post(
-            OPENAI_ENDPOINT,
+            url,
             headers=headers,
             json=payload
         )
-        response.raise_for_status()
+
+        #  --- temporary debug -------------
+        if response.status_code >= 400:
+            print("==== OpenAI returned ====")
+            print(response.status_code, response.text)   # <-- see the real reason
+            response.raise_for_status()
+        #  ---------------------------------
         
         data = response.json()
         
         # Responses API structure - check for 'output' field
         if "output" in data:
-            output_content = data["output"]
-            print(f"✅ Generated response: {str(output_content)[:200]}...")
-            
-            # If output is already a dict/JSON, return it directly
-            if isinstance(output_content, dict):
-                return output_content
-            
-            # If output is a string, try to parse it as JSON
-            if isinstance(output_content, str):
-                try:
-                    parsed_json = json.loads(output_content)
-                    return parsed_json
-                except json.JSONDecodeError as e:
-                    print(f"❌ Error parsing JSON response: {e}")
-                    print(f"   Raw response: {output_content}")
-                    return None
-            
-            # If output is neither dict nor string, return as-is and let caller handle
-            return output_content
+            output_items = data["output"]          # <- this is a list
+            if not output_items:
+                print("❌ Empty output list")
+                return None
+
+            # grab the first message’s text
+            first_item = output_items[0]
+            txt = ""
+            for part in first_item.get("content", []):
+                if part.get("type") == "output_text":
+                    txt += part.get("text", "")
+
+            if not txt:
+                print("❌ No output_text found in first message")
+                return None
+
+            # try to parse the text as JSON
+            try:
+                parsed = json.loads(txt)
+                return parsed
+            except json.JSONDecodeError:
+                print("⚠️  Output wasn’t valid JSON, returning raw text")
+                return txt
             
         else:
             print("❌ No 'output' field found in Responses API response")

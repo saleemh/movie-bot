@@ -9,13 +9,14 @@ load_dotenv()
 
 NOTION_KEY = os.getenv("NOTION_KEY")
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
-OPENAI_MODEL = os.getenv("OPENAI_MODEL", "gpt-3.5-turbo")  # Default model
-OPENAI_ENDPOINT = os.getenv("OPENAI_ENDPOINT", "https://api.openai.com/v1/chat/completions")
+SINGLE_FILL_PROMPT_ID = os.getenv("SINGLE_FILL_PROMPT_ID")
+SINGLE_FILL_PROMPT_VERSION = os.getenv("SINGLE_FILL_PROMPT_VERSION")
+OPENAI_ENDPOINT = os.getenv("OPENAI_ENDPOINT", "https://api.openai.com/v1/responses")
 
 notion = NotionClient(auth=NOTION_KEY)
 
-def call_openai_api(prompt, input_text, max_tokens=500):
-    """Call OpenAI API to generate text based on prompt and input."""
+def call_openai_api(prompt_text, input_text, max_tokens=500):
+    """Call OpenAI Responses API using a custom prompt with combined prompt and input text."""
     print(f"🤖 Generating text for: {input_text[:50]}...")
     
     if not OPENAI_API_KEY:
@@ -23,24 +24,33 @@ def call_openai_api(prompt, input_text, max_tokens=500):
         print("   Please add your OpenAI API key to .env")
         return None
     
+    if not SINGLE_FILL_PROMPT_ID:
+        print("⚠️  SINGLE_FILL_PROMPT_ID not found in environment variables")
+        print("   Please add your custom prompt ID to .env")
+        return None
+    
+    if not SINGLE_FILL_PROMPT_VERSION:
+        print("⚠️  SINGLE_FILL_PROMPT_VERSION not found in environment variables")
+        print("   Please add your custom prompt version to .env")
+        return None
+    
     headers = {
         "Authorization": f"Bearer {OPENAI_API_KEY}",
         "Content-Type": "application/json"
     }
     
-    # Combine prompt with input text
-    full_prompt = f"{prompt}\n\nInput: {input_text}"
+    # Combine the prompt text with the input text
+    combined_input = f"{prompt_text}\n\n{input_text}"
     
     payload = {
-        "model": OPENAI_MODEL,
-        "messages": [
-            {
-                "role": "user",
-                "content": full_prompt
-            }
-        ],
-        "max_tokens": max_tokens,
-        "temperature": 0.7
+        "prompt": {
+            "id": SINGLE_FILL_PROMPT_ID,
+            "version": SINGLE_FILL_PROMPT_VERSION
+        },
+        "input": combined_input,
+        "max_output_tokens": max_tokens,
+        "temperature": 0.7,
+        "store": False
     }
     
     try:
@@ -53,16 +63,103 @@ def call_openai_api(prompt, input_text, max_tokens=500):
         
         data = response.json()
         
-        if "choices" in data and data["choices"]:
-            generated_text = data["choices"][0]["message"]["content"].strip()
-            print(f"✅ Generated text: {generated_text[:100]}...")
-            return generated_text
-        else:
-            print("❌ No text generated from OpenAI API")
-            return None
+        # Add debug output to see the actual response structure
+        print(f"🔍 DEBUG: Full response keys: {list(data.keys())}")
+        if "text" in data:
+            print(f"🔍 DEBUG: Top-level text field: {data['text']}")
+        if "output" in data and data["output"]:
+            print(f"🔍 DEBUG: Output array has {len(data['output'])} items")
+            for i, item in enumerate(data["output"][:2]):  # Show first 2 items
+                print(f"🔍 DEBUG: Output item {i}: {item}")
+        
+        # Parse Responses API output - try simple format first, then complex format
+        # Method 1: Simple text response (most common for text generation)
+        if "output_text" in data and data["output_text"]:
+            generated_text = data["output_text"].strip()
+            if generated_text:
+                print(f"✅ Generated text: {generated_text[:100]}...")
+                return generated_text
+        
+        # Method 2: Complex output array format (for tool calls, multi-step responses)
+        if "output" in data and data["output"]:
+            # The output is an array of items, look for text content
+            for item in data["output"]:
+                print(f"🔍 DEBUG: Processing item: {item}")
+                
+                if item.get("type") == "text" and item.get("content"):
+                    generated_text = item.get("content", "").strip()
+                    if generated_text:
+                        print(f"✅ Generated text: {generated_text[:100]}...")
+                        return generated_text
+                # Also check for direct text field in items
+                elif item.get("type") == "message" and item.get("content"):
+                    # Handle message type responses
+                    content = item.get("content")
+                    print(f"🔍 DEBUG: Message content: {content}")
+                    if isinstance(content, list):
+                        for content_item in content:
+                            print(f"🔍 DEBUG: Content item: {content_item}")
+                            # Fix: Check for "output_text" type and extract "text" field
+                            if content_item.get("type") == "output_text" and content_item.get("text"):
+                                print(f"🔍 DEBUG: Found output_text type item")
+                                print(f"🔍 DEBUG: Raw text value: {repr(content_item.get('text'))}")
+                                generated_text = content_item.get("text", "").strip()
+                                print(f"🔍 DEBUG: After processing: {repr(generated_text)}")
+                                if generated_text:
+                                    print(f"✅ Generated text: {generated_text[:100]}...")
+                                    return generated_text
+                            # Also keep the original logic for "text" type
+                            elif content_item.get("type") == "text" and content_item.get("text"):
+                                generated_text = content_item.get("text", "").strip()
+                                if generated_text:
+                                    print(f"✅ Generated text: {generated_text[:100]}...")
+                                    return generated_text
+                    elif isinstance(content, str):
+                        generated_text = content.strip()
+                        if generated_text:
+                            print(f"✅ Generated text: {generated_text[:100]}...")
+                            return generated_text
+        
+        # Method 3: Fallback to check direct text field (only if nothing found above)
+        print("🔍 DEBUG: No text found in output array, trying fallback methods...")
+        if "text" in data and data["text"]:
+            print(f"🔍 DEBUG: Trying fallback text field: {data['text']}")
+            if isinstance(data["text"], dict) and "content" in data["text"]:
+                generated_text = data["text"]["content"].strip()
+            elif isinstance(data["text"], str):
+                generated_text = data["text"].strip()
+            else:
+                generated_text = str(data["text"]).strip()
+            
+            if generated_text:
+                print(f"✅ Generated text (fallback): {generated_text[:100]}...")
+                return generated_text
+        
+        # If we get here, no text was found
+        print("❌ No text content found in API response")
+        print(f"Response keys: {list(data.keys())}")
+        
+        # Enhanced debugging - show structure of key fields
+        if "output_text" in data:
+            print(f"output_text: {data['output_text']}")
+        if "output" in data:
+            print(f"Output array length: {len(data['output']) if data['output'] else 0}")
+            if data['output']:
+                print(f"First output item: {data['output'][0]}")
+        if "text" in data:
+            print(f"Text field: {data['text']}")
+        
+        return None
         
     except requests.exceptions.RequestException as e:
-        print(f"❌ Error calling OpenAI API: {e}")
+        print(f"❌ Error calling OpenAI Responses API: {e}")
+        # Print response content for debugging
+        if hasattr(e, 'response') and e.response is not None:
+            try:
+                error_data = e.response.json()
+                print(f"Error details: {error_data}")
+            except:
+                print(f"Response content: {e.response.text}")
         return None
 
 def get_database_by_name(database_name):
@@ -118,6 +215,8 @@ def get_database_by_name(database_name):
 def update_page_with_text(page_id, output_property, generated_text, page_title):
     """Update a Notion page with generated text in the specified property."""
     print(f"🔄 Updating {output_property} for: {page_title}")
+    print(f"🔍 DEBUG: Value being sent to Notion: {repr(generated_text)}")
+    print(f"🔍 DEBUG: Value type: {type(generated_text)}")
     
     try:
         notion.pages.update(
@@ -176,11 +275,11 @@ def get_property_value(page_properties, property_name):
     return None
 
 def main():
-    parser = argparse.ArgumentParser(description="Enrich Notion database pages with AI-generated text")
+    parser = argparse.ArgumentParser(description="Enrich Notion database pages with AI-generated text using custom prompts")
     parser.add_argument("database_name", help="Name of the Notion database")
     parser.add_argument("input_property", help="Name of the input property (text)")
     parser.add_argument("output_property", help="Name of the output property (text/rich_text)")
-    parser.add_argument("prompt_text", help="Prompt to send to the AI model")
+    parser.add_argument("prompt_text", help="Prompt text to combine with input property value")
     parser.add_argument("--skip-existing", action="store_true", 
                        help="Skip pages that already have text in the output property")
     parser.add_argument("--max-tokens", type=int, default=500,
@@ -198,8 +297,21 @@ def main():
         print("   Please add your OpenAI API key to .env")
         return 1
     
-    print(f"🤖 Using OpenAI model: {OPENAI_MODEL}")
-    print(f"📝 Prompt: {args.prompt_text}")
+    if not SINGLE_FILL_PROMPT_ID:
+        print("❌ SINGLE_FILL_PROMPT_ID not found in environment variables")
+        print("   Please add your custom prompt ID to .env")
+        return 1
+    
+    if not SINGLE_FILL_PROMPT_VERSION:
+        print("❌ SINGLE_FILL_PROMPT_VERSION not found in environment variables")
+        print("   Please add your custom prompt version to .env")
+        return 1
+    
+    print(f"🤖 Using OpenAI Responses API with custom prompt: {SINGLE_FILL_PROMPT_ID} (v{SINGLE_FILL_PROMPT_VERSION})")
+    print(f"📋 Processing database: {args.database_name}")
+    print(f"📝 Input property: {args.input_property}")
+    print(f"📄 Output property: {args.output_property}")
+    print(f"💬 Prompt: {args.prompt_text}")
     print("")
     
     # Find the database

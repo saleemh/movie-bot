@@ -2,151 +2,72 @@ import os
 import sys
 import json
 import requests
+import argparse
+from dotenv import load_dotenv
 
-# Try to import Pythonista-specific modules
-try:
-    import dialogs
-    import keychain
-    PYTHONISTA_AVAILABLE = True
-except ImportError:
-    PYTHONISTA_AVAILABLE = False
-    print("⚠️  Pythonista modules not available - running in desktop mode")
+load_dotenv()
 
-# Try to import notion_client
-try:
-    from notion_client import Client as NotionClient
-    NOTION_CLIENT_AVAILABLE = True
-except ImportError:
-    NOTION_CLIENT_AVAILABLE = False
-    print("❌ notion_client not installed")
-    print("📱 To install on Pythonista:")
-    print("   1. Open Pythonista")
-    print("   2. Go to Settings > External Modules")
-    print("   3. Install 'notion-client'")
-    print("   4. Or use: pip install notion-client")
+NOTION_KEY = os.getenv("NOTION_KEY")
+OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
+OPENAI_ENDPOINT = os.getenv("OPENAI_ENDPOINT", "https://api.openai.com/v1/responses")
 
-# Configuration - Replace these with your actual values or set them securely
-CONFIG = {
-    "NOTION_KEY": "",
-    "OPENAI_API_KEY": "",
-    "OPENAI_ENDPOINT": "https://api.openai.com/v1/responses"
-}
+# Notion API configuration
+NOTION_VERSION = "2022-06-28"
+NOTION_BASE_URL = "https://api.notion.com/v1"
 
-def get_config_value(key, description):
-    """Get configuration value from keychain, config, or user input."""
-    if PYTHONISTA_AVAILABLE:
-        # Try to get from keychain first
-        try:
-            value = keychain.get_password("movie-bot", key)
-            if value:
-                return value
-        except:
-            pass
-    
-    # Try from CONFIG dictionary
-    if CONFIG.get(key):
-        return CONFIG[key]
-    
-    # Ask user for input
-    if PYTHONISTA_AVAILABLE:
-        value = dialogs.text_dialog(f"Enter {description}", placeholder=f"Your {description}")
-        if value:
-            # Save to keychain for future use
-            try:
-                keychain.set_password("movie-bot", key, value)
-            except:
-                pass
-        return value
-    else:
-        # Desktop fallback
-        return input(f"Enter {description}: ")
-
-def setup_config():
-    """Setup configuration values."""
-    print("🔧 Setting up configuration...")
-    
-    notion_key = get_config_value("NOTION_KEY", "Notion Integration Token")
-    openai_key = get_config_value("OPENAI_API_KEY", "OpenAI API Key")
-    
-    if not notion_key or not openai_key:
-        print("❌ Required API keys not provided")
-        return None, None
-    
-    return notion_key, openai_key
-
-def get_user_inputs():
-    """Get user inputs via dialog boxes or command line."""
-    if PYTHONISTA_AVAILABLE:
-        # Use Pythonista dialogs
-        database_name = dialogs.text_dialog(
-            "Database Name", 
-            "Enter the name of your Notion database",
-            placeholder="My Database"
-        )
-        
-        if not database_name:
-            return None, None, None
-        
-        key_property = dialogs.text_dialog(
-            "Key Property", 
-            "Enter the property name to use as the unique key",
-            placeholder="Name"
-        )
-        
-        if not key_property:
-            return None, None, None
-        
-        input_text = dialogs.text_dialog(
-            "Input Text", 
-            "Enter the text to send to AI for processing",
-            placeholder="Describe what you want to add..."
-        )
-        
-        if not input_text:
-            return None, None, None
-            
-        return database_name, key_property, input_text
-        
-    else:
-        # Desktop fallback
-        print("\n📝 Please provide the following information:")
-        database_name = input("Database name: ")
-        key_property = input("Key property name: ")
-        input_text = input("Input text: ")
-        return database_name, key_property, input_text
+def get_notion_headers():
+    """Get headers for Notion API requests."""
+    return {
+        "Authorization": f"Bearer {NOTION_KEY}",
+        "Content-Type": "application/json",
+        "Notion-Version": NOTION_VERSION
+    }
 
 def get_custom_prompt_config(database_name):
     """Get custom prompt ID and version for the specified database."""
+    # Convert database name to env var format (uppercase, normalize special characters)
+    # Replace spaces, hyphens, and other special chars with underscores
     import re
     db_env_name = re.sub(r'[^A-Za-z0-9]', '_', database_name.upper())
+    # Remove multiple consecutive underscores
     db_env_name = re.sub(r'_+', '_', db_env_name)
+    # Remove leading/trailing underscores
     db_env_name = db_env_name.strip('_')
     
-    # Try to get from keychain or ask user
-    prompt_id_key = f"{db_env_name}_PROMPT_ID"
-    prompt_version_key = f"{db_env_name}_PROMPT_VERSION"
-    
-    prompt_id = get_config_value(prompt_id_key, f"Prompt ID for {database_name}")
-    prompt_version = get_config_value(prompt_version_key, f"Prompt Version for {database_name}")
+    prompt_id = os.getenv(f"{db_env_name}_PROMPT_ID")
+    prompt_version = os.getenv(f"{db_env_name}_PROMPT_VERSION")
     
     if not prompt_id or not prompt_version:
         print(f"❌ Custom prompt configuration not found for database '{database_name}'")
-        print(f"   Database name '{database_name}' maps to keys: '{prompt_id_key}', '{prompt_version_key}'")
+        print(f"   Database name '{database_name}' maps to environment variable prefix: '{db_env_name}'")
+        print(f"   Please add these environment variables to .env:")
+        print(f"   {db_env_name}_PROMPT_ID=your_prompt_id")
+        print(f"   {db_env_name}_PROMPT_VERSION=your_prompt_version")
+        print(f"")
+        print(f"   Examples for common database names:")
+        print(f"   - 'My Movies' → MY_MOVIES_PROMPT_ID, MY_MOVIES_PROMPT_VERSION")
+        print(f"   - 'TV Show Database' → TV_SHOW_DATABASE_PROMPT_ID, TV_SHOW_DATABASE_PROMPT_VERSION")
+        print(f"   - 'Book Reviews (2024)' → BOOK_REVIEWS_2024_PROMPT_ID, BOOK_REVIEWS_2024_PROMPT_VERSION")
         return None, None
     
-    print(f"🎯 Using custom prompt for '{database_name}'")
+    print(f"🎯 Using custom prompt for '{database_name}' (env prefix: {db_env_name})")
     print(f"   ID: {prompt_id}, Version: {prompt_version}")
     return prompt_id, prompt_version
 
-def call_openai_custom_prompt(openai_api_key, prompt_id, prompt_version, input_text):
+def call_openai_custom_prompt(prompt_id, prompt_version, input_text):
     """Call OpenAI Responses API with custom prompt to generate JSON output."""
     print(f"🤖 Calling custom prompt for: {input_text[:50]}...")
     
+    if not OPENAI_API_KEY:
+        print("⚠️  OPENAI_API_KEY not found in environment variables")
+        return None
+    
     headers = {
-        "Authorization": f"Bearer {openai_api_key}",
+        "Authorization": f"Bearer {OPENAI_API_KEY}",
         "Content-Type": "application/json"
     }
     
+    # Construct payload for Responses API
     url = "https://api.openai.com/v1/responses"
     payload = {
         "prompt": {"id": prompt_id, "version": prompt_version},
@@ -156,21 +77,29 @@ def call_openai_custom_prompt(openai_api_key, prompt_id, prompt_version, input_t
     }
     
     try:
-        response = requests.post(url, headers=headers, json=payload)
-        
+        response = requests.post(
+            url,
+            headers=headers,
+            json=payload
+        )
+
+        #  --- temporary debug -------------
         if response.status_code >= 400:
             print("==== OpenAI returned ====")
-            print(response.status_code, response.text)
+            print(response.status_code, response.text)   # <-- see the real reason
             response.raise_for_status()
+        #  ---------------------------------
         
         data = response.json()
         
+        # Responses API structure - check for 'output' field
         if "output" in data:
-            output_items = data["output"]
+            output_items = data["output"]          # <- this is a list
             if not output_items:
                 print("❌ Empty output list")
                 return None
 
+            # grab the first message's text
             first_item = output_items[0]
             txt = ""
             for part in first_item.get("content", []):
@@ -181,6 +110,7 @@ def call_openai_custom_prompt(openai_api_key, prompt_id, prompt_version, input_t
                 print("❌ No output_text found in first message")
                 return None
 
+            # try to parse the text as JSON
             try:
                 parsed = json.loads(txt)
                 return parsed
@@ -197,16 +127,24 @@ def call_openai_custom_prompt(openai_api_key, prompt_id, prompt_version, input_t
         print(f"❌ Error calling OpenAI Responses API: {e}")
         return None
 
-def get_database_by_name(notion, database_name):
-    """Find a database by its title/name."""
+def get_database_by_name(database_name):
+    """Find a database by its title/name using direct API calls."""
     print(f"🔍 Searching for database: {database_name}")
     
     try:
-        response = notion.search(
-            filter={"property": "object", "value": "database"}
-        )
+        url = f"{NOTION_BASE_URL}/search"
+        payload = {
+            "filter": {
+                "property": "object",
+                "value": "database"
+            }
+        }
         
-        databases = response.get("results", [])
+        response = requests.post(url, headers=get_notion_headers(), json=payload)
+        response.raise_for_status()
+        
+        data = response.json()
+        databases = data.get("results", [])
         
         for db in databases:
             title_property = db.get("title", [])
@@ -235,25 +173,29 @@ def get_database_properties(database):
     print(f"📋 Database properties found: {list(prop_info.keys())}")
     return prop_info
 
-def find_existing_page(notion, database_id, key_property, key_value):
+def find_existing_page(database_id, key_property, key_value):
     """Find an existing page in the database with the specified key property value."""
     print(f"🔍 Searching for existing page with {key_property} = '{key_value}'")
     
     try:
-        response = notion.databases.query(
-            database_id=database_id,
-            filter={
+        url = f"{NOTION_BASE_URL}/databases/{database_id}/query"
+        payload = {
+            "filter": {
                 "property": key_property,
                 "rich_text": {
                     "equals": key_value
                 }
             }
-        )
+        }
         
-        pages = response.get("results", [])
+        response = requests.post(url, headers=get_notion_headers(), json=payload)
+        response.raise_for_status()
+        
+        data = response.json()
+        pages = data.get("results", [])
         
         if pages:
-            page = pages[0]
+            page = pages[0]  # Take the first match
             print(f"✅ Found existing page: {page['id']}")
             return page["id"]
         else:
@@ -325,8 +267,8 @@ def format_property_value(value, prop_type):
         print(f"⚠️  Unsupported property type: {prop_type}")
         return None
 
-def create_or_update_page(notion, database_id, page_id, json_data, database_properties, key_property):
-    """Create a new page or update existing page with JSON data."""
+def create_or_update_page(database_id, page_id, json_data, database_properties, key_property):
+    """Create a new page or update existing page with JSON data using direct API calls."""
     properties = {}
     skipped_properties = []
     
@@ -343,6 +285,7 @@ def create_or_update_page(notion, database_id, page_id, json_data, database_prop
         else:
             skipped_properties.append((key, value, "property not found in database"))
     
+    # Log skipped properties
     if skipped_properties:
         print("\n⚠️  Skipped properties:")
         for key, value, reason in skipped_properties:
@@ -350,18 +293,23 @@ def create_or_update_page(notion, database_id, page_id, json_data, database_prop
     
     try:
         if page_id:
+            # Update existing page
             print(f"\n🔄 Updating existing page...")
-            notion.pages.update(
-                page_id=page_id,
-                properties=properties
-            )
+            url = f"{NOTION_BASE_URL}/pages/{page_id}"
+            payload = {"properties": properties}
+            response = requests.patch(url, headers=get_notion_headers(), json=payload)
+            response.raise_for_status()
             print(f"✅ Successfully updated page")
         else:
+            # Create new page
             print(f"\n📝 Creating new page...")
-            notion.pages.create(
-                parent={"database_id": database_id},
-                properties=properties
-            )
+            url = f"{NOTION_BASE_URL}/pages"
+            payload = {
+                "parent": {"database_id": database_id},
+                "properties": properties
+            }
+            response = requests.post(url, headers=get_notion_headers(), json=payload)
+            response.raise_for_status()
             print(f"✅ Successfully created new page")
         
         return True
@@ -370,114 +318,80 @@ def create_or_update_page(notion, database_id, page_id, json_data, database_prop
         print(f"❌ Error {'updating' if page_id else 'creating'} page: {e}")
         return False
 
-def show_success_dialog():
-    """Show success message."""
-    if PYTHONISTA_AVAILABLE:
-        dialogs.alert("Success! ✅", "Page created/updated successfully", "OK")
-    else:
-        print("\n🎉 Page created/updated successfully!")
-
-def show_error_dialog(message):
-    """Show error message."""
-    if PYTHONISTA_AVAILABLE:
-        dialogs.alert("Error ❌", message, "OK")
-    else:
-        print(f"\n❌ {message}")
-
 def main():
-    print("🚀 Notion Row Creator - Mobile Edition")
-    print("=" * 40)
+    parser = argparse.ArgumentParser(description="Add or update Notion database rows using AI-generated JSON")
+    parser.add_argument("database_name", help="Name of the Notion database")
+    parser.add_argument("key_property", help="Name of the property to use as the key")
+    parser.add_argument("input_text", help="Input text to send to the AI model")
     
-    # Check dependencies
-    if not NOTION_CLIENT_AVAILABLE:
-        show_error_dialog("notion_client library not installed. Please install it first.")
+    args = parser.parse_args()
+    
+    if not NOTION_KEY:
+        print("❌ NOTION_KEY not found in environment variables")
         return 1
     
-    # Setup configuration
-    notion_key, openai_key = setup_config()
-    if not notion_key or not openai_key:
-        show_error_dialog("Required API keys not provided")
+    if not OPENAI_API_KEY:
+        print("❌ OPENAI_API_KEY not found in environment variables")
         return 1
     
-    # Initialize Notion client
-    notion = NotionClient(auth=notion_key)
-    
-    # Get user inputs
-    database_name, key_property, input_text = get_user_inputs()
-    if not all([database_name, key_property, input_text]):
-        show_error_dialog("All inputs are required")
-        return 1
-    
-    print(f"🎯 Database: {database_name}")
-    print(f"🔑 Key Property: {key_property}")
-    print(f"📝 Input Text: {input_text}")
+    print(f"🎯 Database: {args.database_name}")
+    print(f"🔑 Key Property: {args.key_property}")
+    print(f"📝 Input Text: {args.input_text}")
     print("")
     
     # Get custom prompt configuration
-    prompt_id, prompt_version = get_custom_prompt_config(database_name)
+    prompt_id, prompt_version = get_custom_prompt_config(args.database_name)
     if not prompt_id or not prompt_version:
-        show_error_dialog("Custom prompt configuration not found")
         return 1
     
     # Find the database
-    database_id, database = get_database_by_name(notion, database_name)
+    database_id, database = get_database_by_name(args.database_name)
     if not database_id:
-        show_error_dialog(f"Database '{database_name}' not found")
         return 1
     
     # Get database properties
     database_properties = get_database_properties(database)
     
     # Validate key property exists
-    if key_property not in database_properties:
-        show_error_dialog(f"Key property '{key_property}' not found in database")
+    if args.key_property not in database_properties:
+        print(f"❌ Key property '{args.key_property}' not found in database")
+        print(f"   Available properties: {list(database_properties.keys())}")
         return 1
     
     print("=" * 60)
     
     # Call OpenAI with custom prompt
-    json_data = call_openai_custom_prompt(openai_key, prompt_id, prompt_version, input_text)
+    json_data = call_openai_custom_prompt(prompt_id, prompt_version, args.input_text)
     if not json_data:
-        show_error_dialog("Failed to get response from OpenAI")
         return 1
     
     # Validate key property exists in JSON response
-    if key_property not in json_data:
-        show_error_dialog(f"Key property '{key_property}' not found in AI response")
+    if args.key_property not in json_data:
+        print(f"❌ Key property '{args.key_property}' not found in AI response")
+        print(f"   Response keys: {list(json_data.keys())}")
         return 1
     
-    key_value = json_data[key_property]
+    key_value = json_data[args.key_property]
     print(f"🔑 Key value from AI: {key_value}")
     
     # Check for existing page
-    existing_page_id = find_existing_page(notion, database_id, key_property, key_value)
+    existing_page_id = find_existing_page(database_id, args.key_property, key_value)
     
     # Create or update page
     success = create_or_update_page(
-        notion, 
         database_id, 
         existing_page_id, 
         json_data, 
         database_properties, 
-        key_property
+        args.key_property
     )
     
     if success:
-        show_success_dialog()
+        action = "Updated" if existing_page_id else "Created"
+        print(f"\n🎉 {action} page successfully!")
         return 0
     else:
-        show_error_dialog("Failed to create/update page")
         return 1
 
 if __name__ == "__main__":
-    try:
-        exit_code = main()
-        sys.exit(exit_code)
-    except KeyboardInterrupt:
-        print("\n👋 Cancelled by user")
-        sys.exit(1)
-    except Exception as e:
-        error_msg = f"Unexpected error: {e}"
-        show_error_dialog(error_msg)
-        print(f"❌ {error_msg}")
-        sys.exit(1) 
+    sys.exit(main()) 

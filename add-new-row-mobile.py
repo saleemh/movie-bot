@@ -3,13 +3,162 @@ import sys
 import json
 import requests
 import argparse
-from dotenv import load_dotenv
 
-load_dotenv()
+# Configuration - Set your API keys here for mobile use
+# Option 1: Set directly here (replace with your actual keys)
+MOBILE_CONFIG = {
+    "NOTION_KEY": "",  # Put your Notion integration token here
+    "OPENAI_API_KEY": "",  # Put your OpenAI API key here
+    "OPENAI_ENDPOINT": "https://api.openai.com/v1/responses",
+    
+    # Add your custom prompts here (replace with actual values)
+    "MY_MOVIES_PROMPT_ID": "",
+    "MY_MOVIES_PROMPT_VERSION": "",
+    # Add more prompt configs as needed:
+    # "TV_SHOWS_PROMPT_ID": "",
+    # "TV_SHOWS_PROMPT_VERSION": "",
+}
 
+def setup_environment():
+    """Setup environment variables for mobile use."""
+    # Try to load from .env file first (if it exists)
+    try:
+        from dotenv import load_dotenv
+        load_dotenv()
+        print("📁 Loaded .env file")
+    except ImportError:
+        print("📱 dotenv not available - using direct configuration")
+    except:
+        print("📱 .env file not found - using direct configuration")
+    
+    # Set up environment variables from MOBILE_CONFIG if not already set
+    for key, value in MOBILE_CONFIG.items():
+        if not os.getenv(key) and value:
+            os.environ[key] = value
+            print(f"✅ Set {key} from mobile config")
+
+# Initialize environment
+setup_environment()
+
+# Get configuration values
 NOTION_KEY = os.getenv("NOTION_KEY")
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
 OPENAI_ENDPOINT = os.getenv("OPENAI_ENDPOINT", "https://api.openai.com/v1/responses")
+
+# Check if we have the required keys
+if not NOTION_KEY:
+    print("❌ NOTION_KEY not configured!")
+    print("   Please set it in the MOBILE_CONFIG section of this script")
+
+if not OPENAI_API_KEY:
+    print("❌ OPENAI_API_KEY not configured!")
+    print("   Please set it in the MOBILE_CONFIG section of this script")
+
+def interactive_setup():
+    """Interactive setup for first-time users."""
+    print("🔧 Interactive Setup")
+    print("=" * 40)
+    
+    # Check if running in Pythonista
+    try:
+        import console
+        import dialogs
+        pythonista_available = True
+    except ImportError:
+        pythonista_available = False
+    
+    if pythonista_available:
+        # Use Pythonista dialogs for a better mobile experience
+        notion_key = dialogs.text_dialog(
+            "Notion Integration Token",
+            "Get this from https://notion.so/my-integrations",
+            placeholder="secret_..."
+        )
+        
+        if notion_key:
+            openai_key = dialogs.text_dialog(
+                "OpenAI API Key", 
+                "Get this from https://platform.openai.com/api-keys",
+                placeholder="sk-..."
+            )
+            
+            if openai_key:
+                # Update the environment
+                os.environ["NOTION_KEY"] = notion_key
+                os.environ["OPENAI_API_KEY"] = openai_key
+                
+                print("✅ Configuration updated!")
+                print("💡 To make this permanent, edit the MOBILE_CONFIG section in this script")
+                return True
+    else:
+        # Fallback for desktop
+        print("Enter your API keys:")
+        notion_key = input("Notion Integration Token: ")
+        openai_key = input("OpenAI API Key: ")
+        
+        if notion_key and openai_key:
+            os.environ["NOTION_KEY"] = notion_key
+            os.environ["OPENAI_API_KEY"] = openai_key
+            return True
+    
+    return False
+
+# If no keys configured, offer interactive setup
+if not NOTION_KEY or not OPENAI_API_KEY:
+    print("\n🚀 First time setup needed!")
+    print("Run interactive_setup() to configure your API keys")
+    print("Or edit the MOBILE_CONFIG section in this script")
+    print()
+    print("Example usage:")
+    print("  interactive_setup()  # Run setup")
+    print("  # Then run your script normally")
+
+def test_configuration():
+    """Test if the API keys are working."""
+    print("🧪 Testing Configuration")
+    print("=" * 30)
+    
+    # Test Notion API
+    if NOTION_KEY:
+        try:
+            url = f"{NOTION_BASE_URL}/users/me"
+            headers = get_notion_headers()
+            response = requests.get(url, headers=headers)
+            
+            if response.status_code == 200:
+                print("✅ Notion API: Working!")
+                user_data = response.json()
+                print(f"   Connected as: {user_data.get('name', 'Unknown')}")
+            else:
+                print(f"❌ Notion API: Error {response.status_code}")
+                print(f"   {response.text}")
+        except Exception as e:
+            print(f"❌ Notion API: {e}")
+    else:
+        print("❌ Notion API: No key configured")
+    
+    # Test OpenAI API (simple test)
+    if OPENAI_API_KEY:
+        try:
+            headers = {
+                "Authorization": f"Bearer {OPENAI_API_KEY}",
+                "Content-Type": "application/json"
+            }
+            # Just test authentication with a simple request
+            url = "https://api.openai.com/v1/models"
+            response = requests.get(url, headers=headers)
+            
+            if response.status_code == 200:
+                print("✅ OpenAI API: Working!")
+            else:
+                print(f"❌ OpenAI API: Error {response.status_code}")
+                print(f"   {response.text}")
+        except Exception as e:
+            print(f"❌ OpenAI API: {e}")
+    else:
+        print("❌ OpenAI API: No key configured")
+    
+    print("\n💡 If tests pass, you're ready to use the script!")
 
 # Notion API configuration
 NOTION_VERSION = "2022-06-28"

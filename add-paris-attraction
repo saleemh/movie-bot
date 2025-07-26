@@ -1,0 +1,52 @@
+#!/bin/bash
+
+# add-paris-attraction - Script to add attractions to your 2025 Paris Trip Plans
+# Usage: ./add-paris-attraction "attraction name"
+
+# Check if an argument was provided
+if [ $# -eq 0 ]; then
+    echo "❌ Error: No attraction provided!"
+    echo ""
+    echo "📝 Usage: $0 \"<attraction_name>\""
+    echo ""
+    echo "🎯 Examples:"
+    echo "   $0 \"Eiffel Tower\""
+    echo "   $0 \"Louvre Museum\""
+    echo "   $0 \"Notre-Dame Cathedral\""
+    echo "   $0 \"Arc de Triomphe\""
+    echo ""
+    echo "💡 This script adds attractions to your '2025 Paris Trip Plans' Notion database."
+    echo "   Make sure you have the required environment variables set up (.env file)."
+    exit 1
+fi
+
+# Check if too many arguments were provided
+if [ $# -gt 1 ]; then
+    echo "❌ Error: Too many arguments provided!"
+    echo ""
+    echo "📝 Usage: $0 \"<attraction_name>\""
+    echo ""
+    echo "💡 If your attraction name contains spaces, make sure to wrap it in quotes."
+    echo "   Example: $0 \"Sacré-Cœur Basilica\""
+    exit 1
+fi
+
+# Get the attraction name from the first argument
+ATTRACTION="$1"
+
+echo "🗼 Adding attraction to your 2025 Paris Trip Plans..."
+echo "🎯 Attraction: $ATTRACTION"
+echo ""
+
+# Call the underlying Python script with the fixed parameters
+python3 add-new-row.py "2025 Paris Trip Plans" "ITEM" "$ATTRACTION"
+
+# Check the exit status of the Python script
+if [ $? -eq 0 ]; then
+    echo ""
+    echo "✅ Successfully added '$ATTRACTION' to your Paris trip plans!"
+else
+    echo ""
+    echo "❌ Failed to add '$ATTRACTION'. Please check the error messages above."
+    exit 1
+fi 

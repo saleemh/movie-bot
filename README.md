@@ -13,11 +13,53 @@ Automatically adds relevant images to Notion database pages by searching Unsplas
 ### 3. add-new-row.py
 Creates new Notion database entries or updates existing ones using AI-generated structured data. Uses database-specific custom prompts to convert natural language input into properly formatted database rows.
 
-## Setup
+### 4. add-paris-attraction (Convenience Script)
+A ready-to-use executable script specifically designed for adding attractions to your "2025 Paris Trip Plans" Notion database. This script wraps `add-new-row.py` with pre-configured parameters for easy Paris trip planning.
+
+## Quick Setup
+
+### Option 1: Automated Setup (Recommended)
+Run the initialization script to automatically set up the project:
+
+```bash
+# Clone the repository
+git clone <repository-url>
+cd movie-bot
+
+# Run the setup script
+chmod +x setup.sh
+./setup.sh
+```
+
+The setup script will:
+- Install Python dependencies
+- Set executable permissions for scripts
+- Check for required environment files
+- Provide next steps guidance
+
+### Option 2: Manual Setup
 
 ### 1. Install Dependencies
+
+**Using Virtual Environment (Recommended):**
+```bash
+# Create and activate virtual environment
+python3 -m venv venv
+source venv/bin/activate  # On Windows: venv\Scripts\activate
+
+# Install dependencies
+pip install -r requirements.txt
+```
+
+**System-wide Installation:**
 ```bash
 pip install -r requirements.txt
+```
+
+**Make Scripts Executable:**
+```bash
+chmod +x setup.sh
+chmod +x add-paris-attraction
 ```
 
 ### 2. Create Environment File
@@ -180,6 +222,45 @@ The script automatically converts database names to environment variable prefixe
 - "Book Reviews" → `BOOK_REVIEWS_`
 - "Project Tasks (2024)" → `PROJECT_TASKS_2024_`
 
+### Paris Trip Convenience Script
+
+The `add-paris-attraction` script provides a simplified interface for adding attractions to your Paris trip plans.
+
+**Syntax:**
+```bash
+./add-paris-attraction "attraction name"
+```
+
+**Examples:**
+```bash
+# Add famous landmarks
+./add-paris-attraction "Eiffel Tower"
+./add-paris-attraction "Arc de Triomphe"
+./add-paris-attraction "Notre-Dame Cathedral"
+
+# Add museums
+./add-paris-attraction "Louvre Museum"
+./add-paris-attraction "Musée d'Orsay"
+./add-paris-attraction "Centre Pompidou"
+
+# Add neighborhoods and areas
+./add-paris-attraction "Montmartre District"
+./add-paris-attraction "Latin Quarter"
+./add-paris-attraction "Champs-Élysées"
+```
+
+**Requirements:**
+- Must have a Notion database named "2025 Paris Trip Plans"
+- Database must have an "ITEM" property (the key property for attractions)
+- Requires the same environment variables as `add-new-row.py`
+- Needs custom prompt configuration: `2025_PARIS_TRIP_PLANS_PROMPT_ID` and `2025_PARIS_TRIP_PLANS_PROMPT_VERSION`
+
+**Error Handling:**
+The script provides clear usage instructions when:
+- No arguments are provided
+- Too many arguments are provided
+- The underlying Python script encounters errors
+
 ## Environment Variables Reference
 
 | Variable | Purpose | Required For | Example |
@@ -192,6 +273,8 @@ The script automatically converts database names to environment variable prefixe
 | `UNSPLASH_ACCESS_KEY` | Unsplash API access | photo-enricher.py | `abc123def456...` |
 | `{DB_NAME}_PROMPT_ID` | Database-specific prompt ID | add-new-row.py | `prompt_xyz789` |
 | `{DB_NAME}_PROMPT_VERSION` | Database-specific prompt version | add-new-row.py | `1` |
+| `2025_PARIS_TRIP_PLANS_PROMPT_ID` | Custom prompt for Paris trip script | add-paris-attraction | `prompt_paris123` |
+| `2025_PARIS_TRIP_PLANS_PROMPT_VERSION` | Prompt version for Paris trip script | add-paris-attraction | `1` |
 
 ## Notion Property Type Support
 

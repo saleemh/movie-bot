@@ -39,7 +39,7 @@ echo "🎯 Attraction: $ATTRACTION"
 echo ""
 
 # Call the underlying Python script with the fixed parameters
-python3 add-new-row.py "2025 Paris Trip Plans" "ITEM" "$ATTRACTION"
+python3 add-new-row.py "2025 Paris Trip Plans" "Attraction" "$ATTRACTION"
 
 # Check the exit status of the Python script
 if [ $? -eq 0 ]; then

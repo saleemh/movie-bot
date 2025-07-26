@@ -13,8 +13,8 @@ Automatically adds relevant images to Notion database pages by searching Unsplas
 ### 3. add-new-row.py
 Creates new Notion database entries or updates existing ones using AI-generated structured data. Uses database-specific custom prompts to convert natural language input into properly formatted database rows.
 
-### 4. add-paris-attraction (Convenience Script)
-A ready-to-use executable script specifically designed for adding attractions to your "2025 Paris Trip Plans" Notion database. This script wraps `add-new-row.py` with pre-configured parameters for easy Paris trip planning.
+### 4. paris-bot (Paris Trip Assistant)
+A comprehensive command-line bot specifically designed for managing your "2025 Paris Trip Plans" Notion database. This multi-command script provides an easy interface for adding attractions, enriching content with photos, and generating AI-powered descriptions.
 
 ## Quick Setup
 
@@ -59,7 +59,7 @@ pip install -r requirements.txt
 **Make Scripts Executable:**
 ```bash
 chmod +x setup.sh
-chmod +x add-paris-attraction
+chmod +x paris-bot
 ```
 
 ### 2. Create Environment File
@@ -222,44 +222,75 @@ The script automatically converts database names to environment variable prefixe
 - "Book Reviews" → `BOOK_REVIEWS_`
 - "Project Tasks (2024)" → `PROJECT_TASKS_2024_`
 
-### Paris Trip Convenience Script
+### Paris Bot - Comprehensive Trip Assistant
 
-The `add-paris-attraction` script provides a simplified interface for adding attractions to your Paris trip plans.
+The `paris-bot` script provides a complete interface for managing your Paris trip plans with multiple commands.
 
-**Syntax:**
+**General Syntax:**
 ```bash
-./add-paris-attraction "attraction name"
+./paris-bot <command> <input> [second_input]
+```
+
+#### Available Commands
+
+**1. add-attraction - Add New Attractions**
+```bash
+./paris-bot add-attraction "attraction name"
 ```
 
 **Examples:**
 ```bash
 # Add famous landmarks
-./add-paris-attraction "Eiffel Tower"
-./add-paris-attraction "Arc de Triomphe"
-./add-paris-attraction "Notre-Dame Cathedral"
+./paris-bot add-attraction "Eiffel Tower"
+./paris-bot add-attraction "Arc de Triomphe"
+./paris-bot add-attraction "Notre-Dame Cathedral"
 
 # Add museums
-./add-paris-attraction "Louvre Museum"
-./add-paris-attraction "Musée d'Orsay"
-./add-paris-attraction "Centre Pompidou"
+./paris-bot add-attraction "Louvre Museum"
+./paris-bot add-attraction "Musée d'Orsay"
+./paris-bot add-attraction "Centre Pompidou"
 
 # Add neighborhoods and areas
-./add-paris-attraction "Montmartre District"
-./add-paris-attraction "Latin Quarter"
-./add-paris-attraction "Champs-Élysées"
+./paris-bot add-attraction "Montmartre District"
+./paris-bot add-attraction "Latin Quarter"
+./paris-bot add-attraction "Champs-Élysées"
+```
+
+**2. enrich-photos - Add Relevant Photos**
+```bash
+./paris-bot enrich-photos
+```
+
+Automatically adds relevant photos from Unsplash to all attractions in your database based on their "AI Lookup" property content.
+
+**3. add-attribute - Generate Custom Content**
+```bash
+./paris-bot add-attribute "output_property" "prompt_text"
+```
+
+**Examples:**
+```bash
+# Add descriptions
+./paris-bot add-attribute "Description" "Write a 2-sentence travel description:"
+
+# Add visiting information
+./paris-bot add-attribute "Best Time to Visit" "When is the best time to visit this attraction?"
+./paris-bot add-attribute "Duration" "How long does a typical visit take?"
+./paris-bot add-attribute "Ticket Price" "What is the typical admission price?"
+
+# Add travel tips
+./paris-bot add-attribute "Tips" "What are the best tips for visiting this attraction?"
+./paris-bot add-attribute "Nearby Attractions" "What other attractions are nearby?"
 ```
 
 **Requirements:**
 - Must have a Notion database named "2025 Paris Trip Plans"
-- Database must have an "ITEM" property (the key property for attractions)
-- Requires the same environment variables as `add-new-row.py`
+- Database must have properties: "Attraction", "AI Lookup", "Image Summary"
+- Requires the same environment variables as the underlying scripts
 - Needs custom prompt configuration: `2025_PARIS_TRIP_PLANS_PROMPT_ID` and `2025_PARIS_TRIP_PLANS_PROMPT_VERSION`
 
 **Error Handling:**
-The script provides clear usage instructions when:
-- No arguments are provided
-- Too many arguments are provided
-- The underlying Python script encounters errors
+The script provides clear usage instructions and examples for each command when used incorrectly.
 
 ## Environment Variables Reference
 
@@ -273,8 +304,8 @@ The script provides clear usage instructions when:
 | `UNSPLASH_ACCESS_KEY` | Unsplash API access | photo-enricher.py | `abc123def456...` |
 | `{DB_NAME}_PROMPT_ID` | Database-specific prompt ID | add-new-row.py | `prompt_xyz789` |
 | `{DB_NAME}_PROMPT_VERSION` | Database-specific prompt version | add-new-row.py | `1` |
-| `2025_PARIS_TRIP_PLANS_PROMPT_ID` | Custom prompt for Paris trip script | add-paris-attraction | `prompt_paris123` |
-| `2025_PARIS_TRIP_PLANS_PROMPT_VERSION` | Prompt version for Paris trip script | add-paris-attraction | `1` |
+| `2025_PARIS_TRIP_PLANS_PROMPT_ID` | Custom prompt for Paris bot | paris-bot | `prompt_paris123` |
+| `2025_PARIS_TRIP_PLANS_PROMPT_VERSION` | Prompt version for Paris bot | paris-bot | `1` |
 
 ## Notion Property Type Support
 

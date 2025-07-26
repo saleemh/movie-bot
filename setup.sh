@@ -72,12 +72,12 @@ fi
 echo ""
 echo "🔧 Setting up executable permissions for scripts..."
 
-# Make the Paris attraction script executable
-if [ -f "add-paris-attraction" ]; then
-    chmod +x add-paris-attraction
-    echo "✅ Made add-paris-attraction executable"
+# Make the Paris bot script executable
+if [ -f "paris-bot" ]; then
+    chmod +x paris-bot
+    echo "✅ Made paris-bot executable"
 else
-    echo "⚠️  add-paris-attraction script not found"
+    echo "⚠️  paris-bot script not found"
 fi
 
 # Make this setup script executable for future use
@@ -103,6 +103,6 @@ echo "   1. Create a .env file with your API keys (see README.md)"
 echo "   2. Configure your Notion integration permissions"
 echo "   3. Test the scripts with your databases"
 echo ""
-echo "💡 Quick start with Paris trip script:"
-echo "   ./add-paris-attraction \"Eiffel Tower\""
+echo "💡 Quick start with Paris bot:"
+echo "   ./paris-bot add-attraction \"Eiffel Tower\""
 echo "" 

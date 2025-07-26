@@ -1,0 +1,157 @@
+#!/bin/bash
+
+# paris-bot - Comprehensive script for managing your 2025 Paris Trip Plans
+# Usage: ./paris-bot <command> <input> [second_input]
+
+# Function to show usage instructions
+show_usage() {
+    echo "🗼 Paris Bot - Your 2025 Paris Trip Planning Assistant"
+    echo ""
+    echo "📝 Usage: $0 <command> <input> [second_input]"
+    echo ""
+    echo "🎯 Available Commands:"
+    echo ""
+    echo "   add-attraction <attraction_name>"
+    echo "      Adds a new attraction to your Paris trip plans"
+    echo "      Example: $0 add-attraction \"Eiffel Tower\""
+    echo ""
+    echo "   enrich-photos"
+    echo "      Adds relevant photos to attractions in your database"
+    echo "      Example: $0 enrich-photos"
+    echo ""
+    echo "   add-attribute <output_property> <prompt_text>"
+    echo "      Enriches attractions with AI-generated text content"
+    echo "      Example: $0 add-attribute \"Description\" \"Write a 2-sentence travel description:\""
+    echo ""
+    echo "💡 All commands work with your '2025 Paris Trip Plans' Notion database."
+    echo "   Make sure you have the required environment variables set up (.env file)."
+    echo ""
+    echo "🔧 Requirements:"
+    echo "   - Notion database named '2025 Paris Trip Plans'"
+    echo "   - Properties: 'Attraction', 'AI Lookup', 'Image Summary'"
+    echo "   - Required API keys in .env file"
+}
+
+# Check if at least one argument was provided
+if [ $# -eq 0 ]; then
+    echo "❌ Error: No command provided!"
+    echo ""
+    show_usage
+    exit 1
+fi
+
+# Get the command from the first argument
+COMMAND="$1"
+
+# Handle different commands
+case "$COMMAND" in
+    "add-attraction")
+        # Check if attraction name was provided
+        if [ $# -ne 2 ]; then
+            echo "❌ Error: add-attraction requires exactly one argument!"
+            echo ""
+            echo "📝 Usage: $0 add-attraction \"<attraction_name>\""
+            echo ""
+            echo "🎯 Examples:"
+            echo "   $0 add-attraction \"Eiffel Tower\""
+            echo "   $0 add-attraction \"Louvre Museum\""
+            echo "   $0 add-attraction \"Notre-Dame Cathedral\""
+            echo "   $0 add-attraction \"Arc de Triomphe\""
+            exit 1
+        fi
+        
+        ATTRACTION="$2"
+        echo "🗼 Adding attraction to your 2025 Paris Trip Plans..."
+        echo "🎯 Attraction: $ATTRACTION"
+        echo ""
+        
+        # Call the underlying Python script with the fixed parameters
+        python3 add-new-row.py "2025 Paris Trip Plans" "Attraction" "$ATTRACTION"
+        
+        # Check the exit status of the Python script
+        if [ $? -eq 0 ]; then
+            echo ""
+            echo "✅ Successfully added '$ATTRACTION' to your Paris trip plans!"
+        else
+            echo ""
+            echo "❌ Failed to add '$ATTRACTION'. Please check the error messages above."
+            exit 1
+        fi
+        ;;
+        
+    "enrich-photos")
+        # No additional arguments needed for enrich-photos
+        if [ $# -ne 1 ]; then
+            echo "❌ Error: enrich-photos takes no additional arguments!"
+            echo ""
+            echo "📝 Usage: $0 enrich-photos"
+            echo ""
+            echo "💡 This command adds relevant photos to all attractions in your database"
+            echo "   based on their 'AI Lookup' property content."
+            exit 1
+        fi
+        
+        echo "📸 Enriching your Paris attractions with photos..."
+        echo "🎯 Database: 2025 Paris Trip Plans"
+        echo "📝 Input: AI Lookup → Output: Image Summary"
+        echo ""
+        
+        # Call the photo enricher script
+        python3 photo-enricher.py "2025 Paris Trip Plans" "AI Lookup" "Image Summary"
+        
+        # Check the exit status
+        if [ $? -eq 0 ]; then
+            echo ""
+            echo "✅ Successfully enriched attractions with photos!"
+        else
+            echo ""
+            echo "❌ Failed to enrich photos. Please check the error messages above."
+            exit 1
+        fi
+        ;;
+        
+    "add-attribute")
+        # Check if both output property and prompt text were provided
+        if [ $# -ne 3 ]; then
+            echo "❌ Error: add-attribute requires exactly two arguments!"
+            echo ""
+            echo "📝 Usage: $0 add-attribute \"<output_property>\" \"<prompt_text>\""
+            echo ""
+            echo "🎯 Examples:"
+            echo "   $0 add-attribute \"Description\" \"Write a 2-sentence travel description:\""
+            echo "   $0 add-attribute \"Best Time to Visit\" \"When is the best time to visit this attraction?\""
+            echo "   $0 add-attribute \"Ticket Price\" \"What is the typical admission price?\""
+            echo "   $0 add-attribute \"Duration\" \"How long does a typical visit take?\""
+            exit 1
+        fi
+        
+        OUTPUT_PROPERTY="$2"
+        PROMPT_TEXT="$3"
+        
+        echo "✨ Enriching attractions with AI-generated content..."
+        echo "🎯 Database: 2025 Paris Trip Plans"
+        echo "📝 Input: AI Lookup → Output: $OUTPUT_PROPERTY"
+        echo "🤖 Prompt: $PROMPT_TEXT"
+        echo ""
+        
+        # Call the property text enricher script
+        python3 property-text-enricher.py "2025 Paris Trip Plans" "AI Lookup" "$OUTPUT_PROPERTY" "$PROMPT_TEXT"
+        
+        # Check the exit status
+        if [ $? -eq 0 ]; then
+            echo ""
+            echo "✅ Successfully enriched attractions with '$OUTPUT_PROPERTY' content!"
+        else
+            echo ""
+            echo "❌ Failed to enrich attributes. Please check the error messages above."
+            exit 1
+        fi
+        ;;
+        
+    *)
+        echo "❌ Error: Unknown command '$COMMAND'"
+        echo ""
+        show_usage
+        exit 1
+        ;;
+esac 
